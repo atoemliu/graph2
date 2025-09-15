@@ -17,7 +17,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 yAxisID: 'y',
                 linePointStyle: 'circle',
                 lineBorderWidth: 2,
-                lineFill: false
+                lineFill: false,
+                visible: true
             },
             {
                 label: '对比量 2',
@@ -29,7 +30,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 yAxisID: 'y',
                 linePointStyle: 'circle',
                 lineBorderWidth: 2,
-                lineFill: false
+                lineFill: false,
+                visible: true
             }
         ]
     };
@@ -58,6 +60,18 @@ document.addEventListener('DOMContentLoaded', function () {
                         </div>
                     </div>
                 </div>
+                <div class="control-group">
+                    <label>显示控制</label>
+                    <div class="inline-row">
+                        <div class="visibility-control">
+                            <label class="switch">
+                                <input type="checkbox" id="dataset-visible-${index}" ${dataset.visible !== false ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="switch-label">在图表中显示</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="control-group color-input">
                     <label for="dataset-color-${index}">颜色</label>
                     <input type="color" id="dataset-color-${index}" value="${colorHex}">
@@ -77,14 +91,28 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!select) return;
         const prev = select.value;
         select.innerHTML = '';
+        
+        // 只显示可见的数据系列
         initialData.datasets.forEach((ds, i) => {
-            const opt = document.createElement('option');
-            opt.value = String(i);
-            opt.textContent = ds.label || `系列 ${i + 1}`;
-            select.appendChild(opt);
+            if (ds.visible !== false) {
+                const opt = document.createElement('option');
+                opt.value = String(i);
+                opt.textContent = ds.label || `系列 ${i + 1}`;
+                select.appendChild(opt);
+            }
         });
+        
+        // 如果之前选择的系列仍然可见，保持选择
         if (prev && [...select.options].some(o => o.value === prev)) {
-            select.value = prev;
+            const selectedDataset = initialData.datasets[parseInt(prev)];
+            if (selectedDataset && selectedDataset.visible !== false) {
+                select.value = prev;
+            }
+        }
+        
+        // 如果没有可见的系列或之前的选择不可见，选择第一个可见的
+        if (!select.value && select.options.length > 0) {
+            select.value = select.options[0].value;
         }
     }
 
@@ -101,9 +129,14 @@ document.addEventListener('DOMContentLoaded', function () {
         const chartType = document.getElementById('chart-type').value;
         const orientation = document.querySelector('#orientation-vertical').classList.contains('active') ? 'x' : 'y';
         
-        let datasets = JSON.parse(JSON.stringify(initialData.datasets));
+        // 过滤掉不可见的数据系列
+        let datasets = JSON.parse(JSON.stringify(initialData.datasets.filter(ds => ds.visible !== false)));
         const labels = initialData.labels.slice();
 
+        // 根据当前主题获取文字颜色
+        const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+        const textColor = isDarkTheme ? '#e0e0e0' : '#222';
+        
         // Common options
         const options = {
             indexAxis: orientation,
@@ -113,11 +146,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 title: {
                     display: true,
                     text: document.getElementById('chart-title').value,
-                    color: '#222',
+                    color: textColor,
                     font: { size: 20, weight: '700' },
                     padding: { top: 8, bottom: 16 }
                 },
-                legend: { display: true },
+                legend: { 
+                    display: true,
+                    labels: {
+                        color: textColor
+                    }
+                },
                 filler: { propagate: false, drawTime: 'beforeDatasetsDraw' }
             },
             scales: {}
@@ -232,6 +270,139 @@ document.addEventListener('DOMContentLoaded', function () {
                     y: { display: false, grid: { display: false }, ticks: { display: false } }
                 };
                 options.plugins.legend = { display: true };
+                
+                // 添加自定义插件来显示饼图数据标签
+                options.plugins.pieDataLabels = {
+                    id: 'pieDataLabels',
+                    afterDatasetsDraw(chart) {
+                        const ctx = chart.ctx;
+                        const chartData = chart.data;
+                        const meta = chart.getDatasetMeta(0);
+                        
+                        if (meta.hidden) return;
+                        
+                        const total = chartData.datasets[0].data.reduce((sum, value) => sum + value, 0);
+                        
+                        // 辅助函数：检查文字是否完全在扇形区域内
+                        function isTextInSector(textX, textY, textW, textH, centerX, centerY, startAng, endAng, innerR, outerR) {
+                            // 检查文字四个角点是否都在扇形内
+                            const corners = [
+                                [textX - textW/2, textY - textH/2], // 左上
+                                [textX + textW/2, textY - textH/2], // 右上
+                                [textX - textW/2, textY + textH/2], // 左下
+                                [textX + textW/2, textY + textH/2]  // 右下
+                            ];
+                            
+                            return corners.every(([px, py]) => {
+                                const dx = px - centerX;
+                                const dy = py - centerY;
+                                const distance = Math.sqrt(dx * dx + dy * dy);
+                                let angle = Math.atan2(dy, dx);
+                                
+                                // 标准化角度到0-2π范围
+                                if (angle < 0) angle += 2 * Math.PI;
+                                
+                                // 检查是否在半径范围内
+                                if (distance < innerR || distance > outerR) return false;
+                                
+                                // 检查是否在角度范围内
+                                let normalizedStart = startAng;
+                                let normalizedEnd = endAng;
+                                if (normalizedStart < 0) normalizedStart += 2 * Math.PI;
+                                if (normalizedEnd < 0) normalizedEnd += 2 * Math.PI;
+                                
+                                if (normalizedStart <= normalizedEnd) {
+                                    return angle >= normalizedStart && angle <= normalizedEnd;
+                                } else {
+                                    // 跨越0度的情况
+                                    return angle >= normalizedStart || angle <= normalizedEnd;
+                                }
+                            });
+                        }
+                        
+                        chartData.datasets[0].data.forEach((value, index) => {
+                            const arc = meta.data[index];
+                            if (!arc) return;
+                            
+                            const { x, y, startAngle, endAngle, outerRadius, innerRadius } = arc;
+                            
+                            // 计算字体大小（根据图表大小和扇形面积自适应）
+                            const percentage = (value / total) * 100;
+                            
+                            // 如果是很小的扇形，不显示标签
+                            if (percentage < 2) return;
+                            
+                            // 基于图表半径和扇形面积的自适应字体大小
+                            const chartSize = outerRadius; // 图表的实际大小
+                            const arcAngle = endAngle - startAngle; // 扇形角度
+                            const sectorArea = (arcAngle / (2 * Math.PI)) * Math.PI * Math.pow(outerRadius, 2); // 扇形面积
+                            
+                            // 综合考虑图表大小、扇形面积和百分比的字体大小算法
+                            let fontSize = Math.sqrt(sectorArea) * 0.15; // 基于扇形面积
+                            fontSize = Math.max(chartSize * 0.03, Math.min(chartSize * 0.12, fontSize)); // 基于图表大小限制范围
+                            fontSize = Math.max(8, Math.min(24, fontSize)); // 绝对最小最大限制
+                            
+                            // 确保文字能在扇形内完整显示
+                            const availableRadius = (outerRadius - innerRadius) * 0.7; // 可用半径的70%
+                            const maxFontSizeByRadius = availableRadius * 0.4;
+                            fontSize = Math.min(fontSize, maxFontSizeByRadius);
+                            
+                            ctx.save();
+                            ctx.font = `bold ${Math.round(fontSize)}px Arial`;
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            
+                            // 获取标签文本
+                            const labelText = chartData.labels[index] || `项目 ${index + 1}`;
+                            
+                            // 计算文字尺寸
+                            const textMetrics = ctx.measureText(labelText);
+                            const textWidth = textMetrics.width;
+                            const textHeight = fontSize; // 近似文字高度
+                            
+                            // 智能标签位置计算，确保不溢出扇形区域
+                            const midAngle = (startAngle + endAngle) / 2;
+                            let bestX, bestY;
+                            let bestRadius = (outerRadius + innerRadius) / 2; // 默认中心位置
+                            
+                            // 尝试不同半径距离，找到最适合的位置
+                            const radiusSteps = [0.5, 0.3, 0.7, 0.2, 0.8]; // 尝试不同的半径比例
+                            let foundValidPosition = false;
+                            
+                            for (const radiusRatio of radiusSteps) {
+                                const testRadius = innerRadius + (outerRadius - innerRadius) * radiusRatio;
+                                const testX = x + Math.cos(midAngle) * testRadius;
+                                const testY = y + Math.sin(midAngle) * testRadius;
+                                
+                                // 检查文字边界是否在扇形内
+                                if (isTextInSector(testX, testY, textWidth, textHeight, x, y, startAngle, endAngle, innerRadius, outerRadius)) {
+                                    bestX = testX;
+                                    bestY = testY;
+                                    foundValidPosition = true;
+                                    break;
+                                }
+                            }
+                            
+                            // 如果没有找到合适位置，使用默认位置但可能需要缩小字体
+                            if (!foundValidPosition) {
+                                bestX = x + Math.cos(midAngle) * bestRadius;
+                                bestY = y + Math.sin(midAngle) * bestRadius;
+                                
+                                // 对于很小的扇形，进一步缩小字体
+                                if (arcAngle < 0.5) { // 小于约30度的扇形
+                                    fontSize *= 0.8;
+                                    ctx.font = `bold ${Math.round(fontSize)}px Arial`;
+                                }
+                            }
+                            
+                            // 使用主题适配的文字颜色
+                            const pieTextColor = isDarkTheme ? '#e0e0e0' : '#333';
+                            ctx.fillStyle = pieTextColor;
+                            ctx.fillText(labelText, bestX, bestY);
+                            ctx.restore();
+                        });
+                    }
+                };
             }
 
             if (chartType === 'radar') {
@@ -259,10 +430,82 @@ document.addEventListener('DOMContentLoaded', function () {
                 options.scales = {
                     x: { display: false, grid: { display: false }, ticks: { display: false } },
                     y: { display: false, grid: { display: false }, ticks: { display: false } },
-                    r: options.scales && options.scales.r ? options.scales.r : {}
+                    r: {
+                        angleLines: { 
+                            display: true,
+                            color: isDarkTheme ? '#404040' : '#e0e0e0'
+                        },
+                        suggestedMin: 0,
+                        ticks: {
+                            display: false, // 隐藏默认刻度标签，我们手动绘制
+                            stepSize: undefined
+                        },
+                        pointLabels: {
+                            display: true,
+                            font: { size: 12, weight: 'bold' },
+                            color: textColor
+                        },
+                        grid: { 
+                            display: true,
+                            color: isDarkTheme ? '#404040' : '#e0e0e0'
+                        }
+                    }
                 };
                 options.elements = options.elements || {};
                 options.elements.line = Object.assign({}, options.elements.line, { borderWidth: 2 });
+                options.elements.point = Object.assign({}, options.elements.point, { radius: 4 });
+                
+                // 添加自定义插件来显示每个轴的刻度标签
+                options.plugins.tooltip = {
+                    enabled: true
+                };
+                
+                options.plugins.radarAxisLabels = {
+                    id: 'radarAxisLabels',
+                    afterDatasetsDraw(chart) {
+                        const ctx = chart.ctx;
+                        const scale = chart.scales.r;
+                        const labels = chart.data.labels;
+                        
+                        // 计算合适的刻度值
+                        const maxValue = Math.max(...chart.data.datasets.flatMap(ds => ds.data));
+                        const tickCount = 5; // 显示5个刻度
+                        const stepSize = Math.ceil(maxValue / tickCount);
+                        
+                        // 获取当前主题的文字颜色
+                        const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+                        const radarTextColor = isDarkTheme ? '#e0e0e0' : '#333';
+                        
+                        // 为每条轴绘制刻度标签
+                        labels.forEach((label, index) => {
+                            // 修正角度计算 - 使用正确的角度计算方法
+                            const angleInRadians = scale.getIndexAngle(index) - Math.PI / 2; // 减去90度，因为Chart.js的0度是从3点钟方向开始
+                            
+                            // 在每条轴上绘制多个刻度值
+                            for (let i = 1; i <= tickCount; i++) {
+                                const tickValue = stepSize * i;
+                                if (tickValue > maxValue * 1.1) break; // 不超过最大值太多
+                                
+                                const radius = scale.getDistanceFromCenterForValue(tickValue);
+                                
+                                // 精确计算位置 - 确保标签在轴线上
+                                const x = scale.xCenter + Math.cos(angleInRadians) * radius;
+                                const y = scale.yCenter + Math.sin(angleInRadians) * radius;
+                                
+                                ctx.save();
+                                ctx.font = 'bold 10px Arial';
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'middle';
+                                
+                                // 使用主题适配的文字颜色
+                                const text = tickValue.toString();
+                                ctx.fillStyle = radarTextColor;
+                                ctx.fillText(text, x, y);
+                                ctx.restore();
+                            }
+                        });
+                    }
+                };
             }
 
             if (chartType === 'histogram') {
@@ -299,10 +542,18 @@ document.addEventListener('DOMContentLoaded', function () {
             const yRight = document.getElementById('y-axis-right-title').value || '';
             options.scales.x = options.scales.x || {};
             options.scales.y = options.scales.y || {};
-            options.scales.x.title = { display: !!xTitle, text: xTitle, color: '#222', font: { size: 14, weight: '600' } };
-            options.scales.y.title = { display: !!yLeft, text: yLeft, color: '#222', font: { size: 14, weight: '600' } };
+            
+            // 设置轴标题和刻度颜色
+            options.scales.x.title = { display: !!xTitle, text: xTitle, color: textColor, font: { size: 14, weight: '600' } };
+            options.scales.y.title = { display: !!yLeft, text: yLeft, color: textColor, font: { size: 14, weight: '600' } };
+            options.scales.x.ticks = { color: textColor };
+            options.scales.y.ticks = { color: textColor };
+            options.scales.x.grid = { color: isDarkTheme ? '#404040' : '#e0e0e0' };
+            options.scales.y.grid = { color: isDarkTheme ? '#404040' : '#e0e0e0' };
+            
             if (anyRight && yRight) {
-                options.scales.y1.title = { display: true, text: yRight, color: '#222', font: { size: 14, weight: '600' } };
+                options.scales.y1.title = { display: true, text: yRight, color: textColor, font: { size: 14, weight: '600' } };
+                options.scales.y1.ticks = { color: textColor };
             }
             const res = renderChartJS(typeForConfig, labels, datasets, options, chartType);
             if (chartType === 'pie' || chartType === 'donut') {
@@ -318,13 +569,23 @@ document.addEventListener('DOMContentLoaded', function () {
         // --- D3 based types ---
         if (chartType === 'streamgraph') {
             updateSelectedSeriesNote('');
-            return renderD3Streamgraph(labels, initialData.datasets);
+            // 对流图也过滤可见的数据系列
+            const visibleDatasets = initialData.datasets.filter(ds => ds.visible !== false);
+            return renderD3Streamgraph(labels, visibleDatasets);
         }
         if (chartType === 'treemap') {
+            // 对矩形树图，需要从可见的数据系列中选择
+            const visibleDatasets = initialData.datasets.filter(ds => ds.visible !== false);
             const idx = parseInt(document.getElementById('single-series-select').value || '0', 10) || 0;
-            const ds = initialData.datasets[idx] || initialData.datasets[0];
-            updateSelectedSeriesNote(ds.label);
-            return renderD3Treemap(labels, ds);
+            
+            // 如果选择的系列不可见，则选择第一个可见的系列
+            let selectedDataset = initialData.datasets[idx];
+            if (!selectedDataset || selectedDataset.visible === false) {
+                selectedDataset = visibleDatasets[0] || initialData.datasets[0];
+            }
+            
+            updateSelectedSeriesNote(selectedDataset ? selectedDataset.label : '');
+            return renderD3Treemap(labels, selectedDataset);
         }
     }
 
@@ -344,18 +605,30 @@ document.addEventListener('DOMContentLoaded', function () {
             parent.replaceChild(newCanvas, canvas);
             canvas = newCanvas;
             // 维持背景色实时预览
-            const bgLive = (document.getElementById('export-bg') && document.getElementById('export-bg').value) || '#FFFFFF';
+            const exportBgEl = document.getElementById('export-bg');
+            const bgLive = (exportBgEl && exportBgEl.value) || '#FFFFFF';
             canvas.style.backgroundColor = bgLive;
         }
 
         const currentCtx = canvas.getContext('2d');
+        
+        // 注册自定义插件
+        const plugins = [];
+        if (options.plugins && options.plugins.radarAxisLabels) {
+            plugins.push(options.plugins.radarAxisLabels);
+        }
+        if (options.plugins && options.plugins.pieDataLabels) {
+            plugins.push(options.plugins.pieDataLabels);
+        }
+        
         myChart = new Chart(currentCtx, {
             type: (typeForConfig === 'area' || typeForConfig === 'area-stacked') ? 'line' : typeForConfig,
             data: {
                 labels: labels,
                 datasets: datasets
             },
-            options: options
+            options: options,
+            plugins: plugins
         });
     }
 
@@ -380,16 +653,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function sizeSVG() {
-        const container = document.querySelector('.main-content');
+        const container = document.querySelector('.chart-wrap');
         const width = container.clientWidth;
         const height = container.clientHeight;
         svg.setAttribute('width', width);
         svg.setAttribute('height', height);
+        // 设置viewBox确保SVG内容正确缩放
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
         return { width, height };
     }
 
     function renderD3Streamgraph(labels, datasets) {
         const { width, height } = sizeSVG();
+        // 设置更合适的边距
+        const margin = { top: 40, right: 40, bottom: 60, left: 40 };
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+        
         // Prepare data for d3.stack: array of objects per x index
         const keys = datasets.map(d => d.label);
         const dataByIndex = labels.map((_, i) => {
@@ -402,20 +682,21 @@ document.addEventListener('DOMContentLoaded', function () {
         const series = stack(dataByIndex);
 
         // X scale: point across labels
-        const x = d3.scalePoint().domain(labels).range([40, width - 20]);
+        const x = d3.scalePoint().domain(labels).range([0, chartWidth]);
 
         // Y domain
         const yExtent = [
             d3.min(series, s => d3.min(s, d => d[0])),
             d3.max(series, s => d3.max(s, d => d[1]))
         ];
-        const y = d3.scaleLinear().domain(yExtent).nice().range([height - 30, 20]);
+        const y = d3.scaleLinear().domain(yExtent).nice().range([chartHeight, 0]);
 
         // Show SVG, hide canvas
         svg.classList.remove('hidden');
         document.getElementById('myChart').classList.add('hidden');
 
-        const g = d3.select(svg).append('g');
+        const g = d3.select(svg).append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
 
         const area = d3.area()
             .x((d, i) => x(labels[i]))
@@ -438,40 +719,41 @@ document.addEventListener('DOMContentLoaded', function () {
             .attr('fill', (d, i) => colorByLabel.get(keys[i]))
             .attr('opacity', 0.85);
 
-        // Title & axis titles (SVG) - 使用默认常量，已移除相关面板
+        // Title & axis titles (SVG) - 更新位置以适应新的边距系统
         const svgFont = 16;
-        const svgColor = '#222';
-        const xOff = 24;
-        const yLeftOff = 24;
-        const yRightOff = 24;
+        const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+        const svgColor = isDarkTheme ? '#e0e0e0' : '#222';
+        const svgSecondaryColor = isDarkTheme ? '#888' : '#666';
 
-        g.append('text')
-            .attr('x', 20)
-            .attr('y', 24)
-            .attr('fill', '#333')
-            .attr('font-size', 16)
+        // 图表标题 - 位于顶部居中
+        d3.select(svg).append('text')
+            .attr('x', width / 2)
+            .attr('y', 25)
+            .attr('fill', svgColor)
+            .attr('font-size', 18)
             .attr('font-weight', '600')
+            .attr('text-anchor', 'middle')
             .text(document.getElementById('chart-title').value);
 
-        // X axis labels
+        // X axis labels - 位于图表底部
         g.selectAll('text.xlbl')
             .data(labels)
             .enter()
             .append('text')
             .attr('class', 'xlbl')
             .attr('x', d => x(d))
-            .attr('y', height - 8)
+            .attr('y', chartHeight + 20)
             .attr('text-anchor', 'middle')
             .attr('font-size', 12)
-            .attr('fill', '#666')
+            .attr('fill', svgSecondaryColor)
             .text(d => d);
 
-        // SVG axis titles
+        // SVG axis titles - 调整位置以适应新的坐标系统
         const xTitle = document.getElementById('x-axis-title').value || '';
         if (xTitle) {
-            g.append('text')
+            d3.select(svg).append('text')
                 .attr('x', width / 2)
-                .attr('y', height - xOff)
+                .attr('y', height - 10)
                 .attr('text-anchor', 'middle')
                 .attr('fill', svgColor)
                 .attr('font-size', svgFont)
@@ -479,8 +761,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         const yLeft = document.getElementById('y-axis-left-title').value || '';
         if (yLeft) {
-            g.append('text')
-                .attr('transform', `translate(${yLeftOff},${height/2}) rotate(-90)`) 
+            d3.select(svg).append('text')
+                .attr('transform', `translate(15, ${height/2}) rotate(-90)`) 
                 .attr('text-anchor', 'middle')
                 .attr('fill', svgColor)
                 .attr('font-size', svgFont)
@@ -488,8 +770,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         const yRight = document.getElementById('y-axis-right-title').value || '';
         if (yRight) {
-            g.append('text')
-                .attr('transform', `translate(${width - yRightOff},${height/2}) rotate(90)`) 
+            d3.select(svg).append('text')
+                .attr('transform', `translate(${width - 15}, ${height/2}) rotate(90)`) 
                 .attr('text-anchor', 'middle')
                 .attr('fill', svgColor)
                 .attr('font-size', svgFont)
@@ -499,6 +781,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderD3Treemap(labels, dataset) {
         const { width, height } = sizeSVG();
+        // 设置边距以确保内容不会被截断
+        const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+        
         svg.classList.remove('hidden');
         document.getElementById('myChart').classList.add('hidden');
 
@@ -507,9 +794,10 @@ document.addEventListener('DOMContentLoaded', function () {
             .sum(d => d.value)
             .sort((a, b) => b.value - a.value);
 
-        d3.treemap().size([width, height]).padding(3)(root);
+        d3.treemap().size([chartWidth, chartHeight]).padding(3)(root);
 
-        const g = d3.select(svg).append('g');
+        const g = d3.select(svg).append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
         const baseHex = rgbaToHex(dataset.backgroundColor) || '#4ECDC4';
         const color = d3.scaleLinear()
             .domain([0, d3.max(values) || 1])
@@ -530,21 +818,77 @@ document.addEventListener('DOMContentLoaded', function () {
             .attr('rx', 6)
             .attr('ry', 6);
 
+        // 计算所有矩形的面积，用于比例计算
+        const allAreas = [];
+        root.leaves().forEach(d => {
+            const width = Math.max(0, d.x1 - d.x0);
+            const height = Math.max(0, d.y1 - d.y0);
+            allAreas.push(width * height);
+        });
+        const maxArea = Math.max(...allAreas);
+        const minArea = Math.min(...allAreas);
+
+        // 获取当前主题的文字颜色
+        const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+        const treemapTextColor = isDarkTheme ? '#e0e0e0' : '#223';
+        
         nodes.append('text')
-            .attr('x', 8)
-            .attr('y', 20)
-            .attr('fill', '#223')
-            .attr('font-size', 12)
-            .attr('font-weight', 600)
+            .attr('fill', treemapTextColor)
+            .attr('font-weight', 'bold')
             .text(d => `${d.data.name}: ${d.value}`)
             .each(function(d) {
-                // clip overly long labels
-                const maxW = Math.max(0, d.x1 - d.x0) - 12;
+                const rectWidth = Math.max(0, d.x1 - d.x0);
+                const rectHeight = Math.max(0, d.y1 - d.y0);
+                const rectArea = rectWidth * rectHeight;
+                
+                // 如果矩形太小，不显示文字
+                if (rectWidth < 40 || rectHeight < 20) {
+                    d3.select(this).style('display', 'none');
+                    return;
+                }
+                
+                // 按面积比例计算字体大小 - 更明显的比例差异
+                const areaRatio = rectArea / maxArea; // 当前面积占最大面积的比例
+                const minFontSize = 10;
+                const maxFontSize = 28;
+                
+                // 使用平方根来缓解极端差异，但保持明显的比例关系
+                let fontSize = minFontSize + (maxFontSize - minFontSize) * Math.sqrt(areaRatio);
+                fontSize = Math.round(fontSize);
+                
+                d3.select(this).attr('font-size', fontSize);
+                
+                // 居中定位
+                const centerX = rectWidth / 2;
+                const centerY = rectHeight / 2;
+                d3.select(this)
+                    .attr('x', centerX)
+                    .attr('y', centerY)
+                    .attr('text-anchor', 'middle')
+                    .attr('dominant-baseline', 'middle');
+                
+                // 自适应文本长度
+                const maxW = rectWidth - 8; // 留一些边距
                 const self = d3.select(this);
                 let txt = self.text();
-                while (this.getComputedTextLength && this.getComputedTextLength() > maxW && txt.length > 0) {
+                
+                // 确保文字不超过矩形宽度
+                while (this.getComputedTextLength && this.getComputedTextLength() > maxW && fontSize > minFontSize) {
+                    fontSize--;
+                    self.attr('font-size', fontSize);
+                }
+                
+                // 如果缩小字体还是太长，就截断文字
+                while (this.getComputedTextLength && this.getComputedTextLength() > maxW && txt.length > 3) {
                     txt = txt.slice(0, -1);
                     self.text(txt + '…');
+                }
+                
+                // 确保字体不超过矩形高度的限制
+                const maxHeightBasedSize = rectHeight * 0.4; // 字体不超过矩形高度的40%
+                if (fontSize > maxHeightBasedSize) {
+                    fontSize = Math.max(minFontSize, Math.floor(maxHeightBasedSize));
+                    self.attr('font-size', fontSize);
                 }
             });
 
@@ -638,7 +982,6 @@ document.addEventListener('DOMContentLoaded', function () {
             } else if (el.type === 'color') {
                 // 颜色输入即时更新
                 el._colorHandler = () => {
-                    console.log('颜色输入事件触发:', el.id, el.value);
                     // 直接更新数据和渲染图表，不重建控件
                     const index = parseInt(el.id.replace('dataset-color-', ''));
                     if (!isNaN(index) && initialData.datasets[index]) {
@@ -664,6 +1007,19 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
         });
+        
+        // 绑定可见性切换开关
+        initialData.datasets.forEach((_, index) => {
+            const visible = document.getElementById(`dataset-visible-${index}`);
+            if (visible) {
+                visible.addEventListener('change', () => {
+                    initialData.datasets[index].visible = visible.checked;
+                    refreshSingleSeriesOptions(); // 更新单系列选择器
+                    debouncedUpdate();
+                });
+            }
+        });
+        
         buildMixedTypeSelectors();
     }
 
@@ -770,7 +1126,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Orientation visibility (hide for pie/donut/radar/treemap/streamgraph/histogram)
         const hideOrientation = (t === 'pie' || t === 'donut' || t === 'radar' || t === 'treemap' || t === 'streamgraph' || t === 'histogram');
-        document.querySelectorAll('.toggle-switch button').forEach(btn => btn.parentElement.parentElement.classList.toggle('hidden', hideOrientation));
+        
+        // 只隐藏方向切换按钮，不影响主题切换按钮
+        document.querySelectorAll('.toggle-switch button').forEach(btn => {
+            // 检查是否是方向切换按钮
+            if (btn.id === 'orientation-vertical' || btn.id === 'orientation-horizontal') {
+                btn.parentElement.parentElement.classList.toggle('hidden', hideOrientation);
+            }
+        });
 
         // Single series selector for pie/donut/histogram/treemap
         document.getElementById('single-series-wrap').classList.toggle('hidden', !(t === 'pie' || t === 'donut' || t === 'histogram' || t === 'treemap'));
@@ -806,7 +1169,8 @@ document.addEventListener('DOMContentLoaded', function () {
             yAxisID: 'y',
             linePointStyle: 'circle',
             lineBorderWidth: 2,
-            lineFill: false
+            lineFill: false,
+            visible: true
         });
         createDatasetControls();
         buildMixedTypeSelectors();
@@ -833,13 +1197,71 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('orientation-vertical').classList.remove('active');
     });
 
+    // 主题切换功能
+    document.getElementById('theme-light').addEventListener('click', function () {
+        this.classList.add('active');
+        document.getElementById('theme-dark').classList.remove('active');
+        setTheme('light');
+    });
+
+    document.getElementById('theme-dark').addEventListener('click', function () {
+        this.classList.add('active');
+        document.getElementById('theme-light').classList.remove('active');
+        setTheme('dark');
+    });
+
+    function setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+        
+        // 更新导出背景色的默认值
+        const exportBgInput = document.getElementById('export-bg');
+        if (exportBgInput) {
+            const newBgColor = theme === 'dark' ? '#2d2d2d' : '#FFFFFF';
+            exportBgInput.value = newBgColor;
+            
+            // 更新画布和SVG的背景色实时预览
+            const canvasEl = document.getElementById('myChart');
+            const svgEl = document.getElementById('d3Chart');
+            if (canvasEl) canvasEl.style.backgroundColor = newBgColor;
+            if (svgEl) svgEl.style.backgroundColor = newBgColor;
+        }
+        
+        // 重新渲染图表以适应新主题
+        renderChart();
+    }
+
+    // 初始化主题
+    function initTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') {
+            document.getElementById('theme-dark').click();
+        }
+    }
+
+    // 页面加载完成后初始化主题
+    initTheme();
+
     // Slider labels
     const cutEl = document.getElementById('donut-cutout');
     const cutLabel = document.getElementById('donut-cutout-value');
     cutEl.addEventListener('input', () => { cutLabel.textContent = cutEl.value; });
+    
     const binsEl = document.getElementById('hist-bins');
     const binsLabel = document.getElementById('hist-bins-value');
     binsEl.addEventListener('input', () => { binsLabel.textContent = binsEl.value; });
+    
+    const pieRadiusEl = document.getElementById('pie-radius');
+    const pieRadiusLabel = document.getElementById('pie-radius-value');
+    if (pieRadiusEl && pieRadiusLabel) {
+        pieRadiusEl.addEventListener('input', () => { pieRadiusLabel.textContent = pieRadiusEl.value; });
+    }
+    
+    const areaOpacityEl = document.getElementById('area-opacity');
+    const areaOpacityLabel = document.getElementById('area-opacity-value');
+    if (areaOpacityEl && areaOpacityLabel) {
+        areaOpacityEl.addEventListener('input', () => { areaOpacityLabel.textContent = areaOpacityEl.value; });
+    }
 
     // Export
     document.getElementById('export-scale').addEventListener('input', (e) => {
@@ -1076,6 +1498,23 @@ document.addEventListener('DOMContentLoaded', function () {
             bgRect.setAttribute('height', height);
             bgRect.setAttribute('fill', bgColor);
             cloned.insertBefore(bgRect, cloned.firstChild);
+            
+            // 为矩形树图添加系列名称标注
+            if (chartType === 'treemap') {
+                const seriesIdx = parseInt(document.getElementById('single-series-select').value || '0', 10) || 0;
+                const seriesName = initialData.datasets[seriesIdx]?.label || '数据系列';
+                
+                const seriesLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                seriesLabel.setAttribute('x', width / 2);
+                seriesLabel.setAttribute('y', height - 10);
+                seriesLabel.setAttribute('text-anchor', 'middle');
+                seriesLabel.setAttribute('fill', '#666');
+                seriesLabel.setAttribute('font-size', '14');
+                seriesLabel.setAttribute('font-weight', '500');
+                seriesLabel.textContent = `数据系列：${seriesName}`;
+                cloned.appendChild(seriesLabel);
+            }
+            
             const source = serializer.serializeToString(cloned);
             const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -1088,7 +1527,26 @@ document.addEventListener('DOMContentLoaded', function () {
         if (usingD3) {
             // Render SVG → Canvas → PNG
             const serializer = new XMLSerializer();
-            const source = serializer.serializeToString(svg);
+            const clonedForPNG = svg.cloneNode(true);
+            
+            // 为矩形树图PNG导出添加系列名称标注
+            if (chartType === 'treemap') {
+                const seriesIdx = parseInt(document.getElementById('single-series-select').value || '0', 10) || 0;
+                const seriesName = initialData.datasets[seriesIdx]?.label || '数据系列';
+                const { width, height } = svg.getBoundingClientRect();
+                
+                const seriesLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                seriesLabel.setAttribute('x', width / 2);
+                seriesLabel.setAttribute('y', height - 10);
+                seriesLabel.setAttribute('text-anchor', 'middle');
+                seriesLabel.setAttribute('fill', '#666');
+                seriesLabel.setAttribute('font-size', '14');
+                seriesLabel.setAttribute('font-weight', '500');
+                seriesLabel.textContent = `数据系列：${seriesName}`;
+                clonedForPNG.appendChild(seriesLabel);
+            }
+            
+            const source = serializer.serializeToString(clonedForPNG);
             const svgBlob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(svgBlob);
             const img = new Image();
@@ -1124,6 +1582,38 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx2.fillRect(0, 0, canvas.width, canvas.height);
             // Draw current chart onto temp canvas by scaling
             ctx2.drawImage(srcCanvas, 0, 0, canvas.width, canvas.height);
+            
+            // 为需要单系列选择的图表添加系列名称标注
+            if (chartType === 'pie' || chartType === 'donut' || chartType === 'histogram') {
+                const seriesIdx = parseInt(document.getElementById('single-series-select').value || '0', 10) || 0;
+                const seriesName = initialData.datasets[seriesIdx]?.label || '数据系列';
+                
+                // 在canvas底部绘制系列标注
+                ctx2.save();
+                ctx2.font = `${14 * scale}px Arial`;
+                ctx2.fillStyle = '#666';
+                ctx2.textAlign = 'center';
+                ctx2.textBaseline = 'bottom';
+                
+                const labelText = `数据系列：${seriesName}`;
+                const labelX = canvas.width / 2;
+                const labelY = canvas.height - (10 * scale);
+                
+                // 添加白色背景提高可读性
+                const textWidth = ctx2.measureText(labelText).width;
+                const textHeight = 14 * scale;
+                const padding = 4 * scale;
+                
+                ctx2.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx2.fillRect(labelX - textWidth/2 - padding, labelY - textHeight - padding, 
+                             textWidth + padding * 2, textHeight + padding * 2);
+                
+                // 绘制文字
+                ctx2.fillStyle = '#666';
+                ctx2.fillText(labelText, labelX, labelY);
+                ctx2.restore();
+            }
+            
             canvas.toBlob((blob) => {
                 const pngUrl = URL.createObjectURL(blob);
                 triggerDownload(pngUrl, `chart-${Date.now()}@${scale}x.png`);
