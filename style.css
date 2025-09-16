@@ -38,6 +38,9 @@ body {
     align-items: center;
     min-height: 100vh;
     transition: background-color 0.3s ease, color 0.3s ease;
+    /* 确保移动端保持固定比例 */
+    min-width: 1200px;
+    overflow-x: auto;
 }
 
 .container {
@@ -45,7 +48,9 @@ body {
     grid-template-columns: 2fr 24px 6fr 24px 2fr; /* 2:6:2 with gaps */
     width: 95%;
     max-width: 1680px;
+    min-width: 1140px; /* 确保最小宽度 */
     height: 90vh;
+    min-height: 700px; /* 确保最小高度 */
     background-color: var(--bg-secondary);
     border-radius: 20px;
     box-shadow: 0 10px 30px var(--shadow-color);
@@ -391,4 +396,36 @@ input:checked + .slider {
 
 input:checked + .slider:before {
     transform: translateX(20px);
+}
+
+/* 移动端优化 - 保持桌面端布局和比例 */
+@media screen and (max-width: 1200px) {
+    body {
+        /* 强制保持最小宽度，允许水平滚动 */
+        min-width: 1200px;
+        overflow-x: scroll;
+        align-items: flex-start;
+        padding: 20px 0;
+    }
+    
+    .container {
+        /* 保持固定宽度，防止压缩变形 */
+        width: 1140px;
+        min-width: 1140px;
+        height: 700px;
+        min-height: 700px;
+        /* 确保在小屏幕上也能正常显示 */
+        flex-shrink: 0;
+    }
+    
+    /* 确保侧边栏不会被过度压缩 */
+    .sidebar, .rightbar {
+        min-width: 200px;
+        font-size: 14px;
+    }
+    
+    /* 图表区域保持比例 */
+    .main-content {
+        min-width: 400px;
+    }
 }
