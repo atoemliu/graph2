@@ -1,4 +1,4 @@
-# 图表生成
+# 用于快速处理数据
 
 https://ciaran272.github.io/graph2
 
