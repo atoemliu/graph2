@@ -1,7 +1,7 @@
-├── index.html              # 主应用入口
-├── style.css               # 样式文件
+├── index.html             
+├── style.css              
 │
-├── src/                    # TypeScript 源码（模块化架构）
+├── src/                   
 │   ├── main.ts             # 应用入口
 │   ├── app.constants.ts    # 常量定义
 │   ├── app.state.ts        # 状态管理
@@ -30,4 +30,5 @@
 │
 ├── tsconfig.json           # TypeScript 配置
 ├── package.json            # NPM 配置
-└── README.md               # 本文件
+
+
