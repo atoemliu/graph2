@@ -695,11 +695,13 @@ namespace App.Renderers.ChartJS {
                                 tension: 0.35,  // 与原网页一致
                                 borderWidth: typeof rest.borderWidth === 'number' ? rest.borderWidth : 2,
                                 pointRadius: typeof rest.pointRadius === 'number' ? rest.pointRadius : 4,
-                                pointHoverRadius: typeof rest.pointHoverRadius === 'number' ? rest.pointHoverRadius : 6,
+                                pointHoverRadius: typeof rest.pointRadius === 'number' ? rest.pointRadius : 4,  // 悬停时不变大
                                 backgroundColor: fillColor,
                                 borderColor: borderColor,
                                 pointBackgroundColor: borderColor,
-                                pointBorderColor: borderColor
+                                pointBorderColor: borderColor,
+                                pointBorderWidth: 0,  // 去掉边框
+                                pointHoverBorderWidth: 0  // 悬停时也不显示边框
                             };
                         });
                     } else if (isAreaStackedChart) {
@@ -717,11 +719,13 @@ namespace App.Renderers.ChartJS {
                                 tension: 0.35,  // 与原网页一致
                                 borderWidth: typeof rest.borderWidth === 'number' ? rest.borderWidth : 1,
                                 pointRadius: typeof rest.pointRadius === 'number' ? rest.pointRadius : 3,
-                                pointHoverRadius: typeof rest.pointHoverRadius === 'number' ? rest.pointHoverRadius : 5,
+                                pointHoverRadius: typeof rest.pointRadius === 'number' ? rest.pointRadius : 3,  // 悬停时不变大
                                 backgroundColor: fillColor,
                                 borderColor: borderColor,
                                 pointBackgroundColor: borderColor,
-                                pointBorderColor: borderColor
+                                pointBorderColor: borderColor,
+                                pointBorderWidth: 0,  // 去掉边框
+                                pointHoverBorderWidth: 0  // 悬停时也不显示边框
                             };
                         });
                         
@@ -750,9 +754,22 @@ namespace App.Renderers.ChartJS {
                         });
                     }
                     
-                    // 关键修复：禁用面积图和堆积面积图的动画，避免白色条纹
+                    // 关键修复：彻底禁用面积图和堆积面积图的所有动画，避免空白区域
                     if (isAreaChart || isAreaStackedChart) {
-                        options.animation = false;
+                        // 完全禁用所有动画效果
+                        options.animation = {
+                            duration: 0,
+                            onComplete: undefined,
+                            onProgress: undefined
+                        };
+                        
+                        // 禁用所有过渡动画
+                        options.transitions = {
+                            active: { animation: { duration: 0 } },
+                            resize: { animation: { duration: 0 } },
+                            show: { animation: { duration: 0 } },
+                            hide: { animation: { duration: 0 } }
+                        };
                     }
                     
                     App.UI.Visibility.updateSeriesNote('');
