@@ -10,12 +10,6 @@ namespace App.Utils.Helpers {
         };
     }
 
-    export function showSuccessFeedback(element: HTMLElement | null, duration: number = 600): void {
-        if (!element) return;
-        element.classList.add('success');
-        setTimeout(() => element.classList.remove('success'), duration);
-    }
-
     export function triggerDownload(url: string, filename: string): void {
         const link = document.createElement('a');
         link.href = url;
@@ -23,13 +17,6 @@ namespace App.Utils.Helpers {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-    }
-
-    export function unwrap<T>(value: T | null | undefined, message: string): T {
-        if (value === null || value === undefined) {
-            throw new Error(message);
-        }
-        return value;
     }
 }
 
