@@ -13,15 +13,6 @@
 #data-controls .dataset-actions #remove-dataset {
     text-shadow: 0 1px 0 rgba(255,255,255,0.6);
 }
-#data-controls .sidebar-header::after {
-#    content: '';
-#    position: absolute;
-#    left: 0;
-#    right: 0;
-#    bottom: -1px;
-#    height: 1px;
-#    background: linear-gradient(90deg, rgba(200, 210, 250, 0.25), rgba(200, 210, 250, 0.05));
-}
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
 
 :root {

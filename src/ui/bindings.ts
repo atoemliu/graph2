@@ -23,7 +23,7 @@ namespace App.UI.Bindings {
                     App.initialData.datasets[index].label = nameInput.value;
                     App.UI.Visibility.refreshSingleSeriesOptions();
                     App.Renderers.ChartJS.renderChart();
-                    App.Utils.Helpers.showSuccessFeedback(target);
+                    App.UI.Motion.showSuccessFeedback(target);
                 }
             }
         });
