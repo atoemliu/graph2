@@ -1,35 +1,33 @@
-├── index.html             
-├── style.css              
-│
-├── src/                   
-│   ├── main.ts             # 入口
-│   ├── app.constants.ts    # 常量定义
-│   ├── app.state.ts        # 状态管理
-│   ├── app.types.ts        # 类型定义
-│   ├── core/              
-│   │   ├── export.ts       # 图表导出
-│   │   └── state.ts        # 状态管理
-│   ├── renderers/          # 图表渲染器
-│   │   ├── chartjs.ts      # Chart.js 渲染
-│   │   └── d3.ts           # D3.js 渲染
-│   ├── ui/               
-│   │   ├── bindings.ts     # 数据绑定
-│   │   ├── controls.ts     # 控件逻辑
-│   │   ├── motion.ts       # 动画
-│   │   ├── theme.ts        # 主题
-│   │   └── visibility.ts   # 可见性控制
-│   └── utils/              # 工具函数
-│       ├── color.ts        # 颜色
-│       ├── data.ts         # 数据
-│       ├── dom.ts          # DOM 操作
-│       └── helpers.ts      # 辅助函数
-│
-├── dist/                  
-│   ├── script.js           
-│   └── script.js.map       # Source Map（调试用）
-│
-├── tsconfig.json          
-├── package.json           
-
-
-
+├── assets                                  # Vite 构建产物
+│   ├── 4496-DDPmyEHw.png                  
+│   ├── index-BaFCRDVS.js                 
+│   ├── index-CMHJ40Nb.js                
+│   └── index-CbDplejI.css              
+├── src                                     # 源码
+│   ├── app.constants.ts                    # 配色、常量枚举等全局常量定义
+│   ├── app.state.ts                        # DOM 缓存、默认数据、状态管理入口
+│   ├── app.types.ts                        # 类型声明
+│   ├── core                                # 核心业务逻辑层
+│   │   ├── export.ts                       # 导出 PNG/SVG 
+│   │   └── state.ts                        # 重置
+│   ├── main.ts                             # 应用入口
+│   ├── renderers                           # 渲染
+│   │   ├── chartjs.ts                      # 通过 Chart.js 渲染除 D3 之外的图表
+│   │   └── d3.ts                           # D3 渲染
+│   ├── ui                          
+│   │   ├── bindings.ts                     # 事件绑定、输入同步、主题/方向切换等
+│   │   ├── controls.ts                     # 动态生成数据集面板/混合图控制
+│   │   ├── motion.ts                       # 过渡动画、操作反馈
+│   │   ├── theme.ts                        # 主题切换、背景色同步
+│   │   └── visibility.ts                   # 控制面板显示/隐藏逻辑
+│   └── utils                               # 工具函数
+│       ├── color.ts                        # 颜色、透明度
+│       ├── data.ts                         # CSV 解析、直方图计算等
+│       ├── dom.ts                          # Canvas/SVG 切换
+│       └── helpers.ts                           
+├── index.html                              # 单页应用静态入口（Vite dev 用）
+├── package-lock.json                       # npm 依赖锁定文件
+├── package.json                            # 项目依赖与 npm script 脚本
+├── style.css                               # 全局样式
+├── tsconfig.json                           # TypeScript 编译配置（ESNext 模块）
+└── vite.config.ts                          # Vite 配置
